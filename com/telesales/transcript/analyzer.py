@@ -1,42 +1,28 @@
 from transformers import pipeline
-import spacy
-import sys
 
-# Load models
-sentiment_pipeline = pipeline("sentiment-analysis")
-nlp = spacy.load("en_core_web_sm")
+# Sentiment analysis model
+sentiment_model = pipeline("sentiment-analysis")
 
-def analyze_sentiment(text):
-  return sentiment_pipeline(text)[0]
-
-def extract_actions(text):
-  doc = nlp(text)
-  actions = []
-  for sent in doc.sents:
-    if any(token.lemma_ in ["schedule", "send", "call", "meet", "follow", "email"] for token in sent):
-      actions.append(sent.text.strip())
+# Simple keyword-based action item extractor
+def extract_action_items(text: str):
+  action_keywords = ["follow up", "call back", "send", "schedule", "confirm", "share"]
+  actions = [kw for kw in action_keywords if kw in text.lower()]
   return actions
 
-def analyze_transcript(file_path, output_path="outputs/analysis.txt"):
-  with open(file_path, "r") as f:
-    transcript = f.read()
+def analyze_transcript(aligned_transcript):
+  """
+  Run NLP analysis (sentiment + action items) on aligned transcript.
+  """
+  analyzed = []
+  for entry in aligned_transcript:
+    sentiment = sentiment_model(entry["text"])[0]  # e.g. {'label': 'POSITIVE', 'score': 0.99}
+    actions = extract_action_items(entry["text"])
 
-  sentiment = analyze_sentiment(transcript)
-  actions = extract_actions(transcript)
-
-  with open(output_path, "w") as f:
-    f.write("=== Sentiment ===\n")
-    f.write(f"{sentiment}\n\n")
-    f.write("=== Actions ===\n")
-    for action in actions:
-      f.write(f"- {action}\n")
-
-  print(f"✅ Analysis saved to {output_path}")
-
-if __name__ == "__main__":
-  if len(sys.argv) < 2:
-    print("Usage: python analyzer.py <transcriptfile>")
-    sys.exit(1)
-
-  transcript_file = sys.argv[1]
-  analyze_transcript(transcript_file)
+    analyzed.append({
+      "speaker": entry["speaker"],
+      "text": entry["text"],
+      "sentiment": sentiment["label"],
+      "confidence": round(sentiment["score"], 2),
+      "actions": actions
+    })
+  return analyzed
